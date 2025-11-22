@@ -6,115 +6,125 @@ Functions for preprocessing stimulus and unit data
 Author: Elliot Pallister
 """
 
-
 import numpy as np
 import pandas as pd
-
-# IMPORTING DATA FUNCTIONS FROM data_io.py
-from pareto.data_io import get_cache, get_session, get_trials, get_unit_channels, get_units_by_area, get_spike_times, get_stimulus_presentations
+from pathlib import Path
 
 """
 
-STIMULUS & TRIAL PROCESSING
+STIMULUS & TRIAL PREPROCESSING
 
 """ 
 
-# OBTAINS STIMULUS ONSETS FOR EACH TRIAL
-def get_trial_stimulus_onsets(trials, image_onsets):
+# CONSTRUCTING AND SAVING DATAFRAME OF ONSET METADATA
 
-  start_index = np.searchsorted(image_onsets, trials['start_time'])
-  stop_index = np.searchsorted(image_onsets, trials['stop_time'])
+def build_onsets_table(
+  session_id: int,
+  s_table: pd.DataFrame,
+  t_table: pd.DataFrame
+  ) -> None:
 
-  onsets = [image_onsets[s:e] for s, e in zip(start_index, stop_index)]
+  s_table = s_table.copy()
 
-  return onsets
+  # Aligning trial ID to stimulus onsets
 
+  for tid, trial in t_table.iterrows():
+    t_start = trial['start_time']
+    t_end = trial['stop_time']
 
-# FILTERS TRIALS BY IMAGE
-def get_image_trials(trials, image, image_onsets, non_abort=True):
+    mask = (s_table["start_time"] >= t_start) & (s_table["start_time"] < t_end)
+    s_table.loc[mask, 'trial_id'] = tid
 
-  image_trials = trials[trials['initial_image_name'] == image].copy()
-  trialwise_stimulus_onsets = get_trial_stimulus_onsets(image_trials, image_onsets)
-  image_trials['stimulus_onsets'] = trialwise_stimulus_onsets
-
-  if non_abort:
-    return image_trials[image_trials['stimulus_onsets'].apply(len) >= 5]
-  else:
-    return image_trials
+  # Assigning trial frame to stimulus onsets
   
-# RETURNS AN ARRAY OF STIMULUS TIMES FOR EACH TRIAL FRAME, 1-11
-def arrange_image_onsets_to_trial(trials):
-
-  events = (
-    trials.assign(
-      frame_index = lambda d: d['stimulus_onsets'].apply(lambda xs: list(range(1, len(xs) + 1)))
-    )
-    .explode(
-      ['frame_index', 'stimulus_onsets']
-    )[['frame_index', 'stimulus_onsets']]
-  )
-  
-  return events
-
-# GROUPS STIMULUS TIMES BY TRIAL FRAME, RETURNS SERIES
-def group_stims_by_frame_index(events):
-
-  grouped = (
-    events
-    .groupby(['frame_index'])['stimulus_onsets']
-    .apply(list)
-    .rename('onsets')
-    .reset_index()
-    .sort_values('frame_index', ignore_index=True)
+  s_table['trial_frame'] = (
+    s_table.groupby("trial_id")
+           .cumcount()
   )
 
-  return grouped
+  # Copying trial framing to passive onsets and cleaning entries
 
-def trial_number_histogram(trials):
+  s_table.loc[s_table["active"] == False, ["trial_id", "trial_frame"]] = s_table.loc[s_table["active"] == True, ["trial_id", "trial_frame"]].values
+  s_table["trial_id"] = s_table["trial_id"].replace(["", " ", "nan", "None"], np.nan)
+  s_table = s_table.dropna(subset=["trial_id"])
+  s_table[["trial_id", "trial_frame"]] = s_table[["trial_id", "trial_frame"]].astype(int)
 
-  events = arrange_image_onsets_to_trial(trials)
-  counts = events['frame_index'].value_counts().sort_index()
+  # Defining onset table structure
 
-  return counts
+  cols_to_save = [
+    "image_name",
+    "active",
+    "trial_id",
+    "trial_frame",
+    "is_change",
+    "start_time",
+  ]
+
+  out = s_table[cols_to_save]
+
+  return out
+
+  
 
 """
 
-RESPONSE PROCESSING
+RESPONSE PREPROCESSING
 
 """
 
-# CONSTRUCTS PSTH MATRIX (O X T) FOR A GIVEN UNIT
-def make_psth_matrix(spikes, onsets, windows, bin_size):
+def build_psths(
+  units: pd.DataFrame,
+  spikes: pd.DataFrame,
+  o_table: pd.DataFrame,
+  windows: dict,
+  bin_size: int
+  ) -> np.ndarray:
 
-  window_dur = windows[0]+windows[3]
+  # Defining common variables
 
-  bins = np.arange(0, window_dur+bin_size, bin_size)
-  traces = []
+  start = windows["pre"][0]
+  end = windows["post"][1]
+  duration = end - start
+  bins = np.arange(0, duration+bin_size, bin_size)
+  tps = (bins[:-1] + bins[1:] / 2)
 
-  for i, start in enumerate(onsets):
-    si = np.searchsorted(spikes, start-windows[0])
-    ei = np.searchsorted(spikes, start+window_dur)
-    trace = np.histogram(spikes[si:ei]-(start-windows[0]), bins)[0]
-    traces.append(trace)
+  # Defining output structure
 
-  return np.vstack(traces), bins
+  n_units = len(units)
+  n_onsets = len(o_table)
+  n_timepoints = len(tps)
 
-# CONSTRUCTS PSTH CUBE (U X O X T) FOR A SET OF UNITS
-def make_psth_cube(units, spikes, onsets, windows, bin_size):
+  psth = np.zeros((n_units, n_onsets, n_timepoints), dtype=np.float32)
 
-  cube = []
-  unit_ids = []
+  # Collecting onsets and unit indices
 
-  for uid, unit in units.iterrows():
-    spike_times = spikes[uid]
-    matrix, bins = make_psth_matrix(spike_times, onsets, windows, bin_size)
-    cube.append(matrix)
-    unit_ids.append(uid)
+  onsets = o_table["start_time"].to_numpy()
+  uids = units.index.to_list()
 
-  return np.stack(cube, axis=0), unit_ids, bins - windows[0]
+  for u, uid in enumerate(uids):
+
+    unit_spikes = spikes[uid]
+
+    for o, onset in enumerate(onsets):
+
+      si = np.searchsorted(unit_spikes, onset+start)
+      ei = np.searchsorted(unit_spikes, onset+end)
+      sts = unit_spikes[si:ei] - onset
+      trace = np.histogram(sts-start, bins)[0]
+
+      psth[u, o, :] = trace
+
+  return psth, tps
 
 
-  
+
+
+
+
+
+
+
+
     
 
   

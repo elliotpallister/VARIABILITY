@@ -96,41 +96,6 @@ def visual_selectivity_filter(
 
   return mask, stats
 
-
-  
-
-
-
-
-
-"""
-
-NORMALISATION
-
-
-"""
-
-def subtract_baseline(cube, baseline_window, bins) -> np.ndarray:
-
-  baseline_indices = np.searchsorted(bins, baseline_window)
-  baseline_means = cube[:, :, baseline_indices[0]:baseline_indices[1]].mean(axis=2, keepdims=True)
-
-  bsub = cube.astype(np.float32, copy=True)
-  bsub -= baseline_means
-
-  return bsub
-
-def zscore(cube, eps=1e-9) -> np.ndarray:
-
-  zs = cube.copy()
-  mu = zs.mean(axis=1, keepdims=True)
-  std = zs.std(axis=1, ddof=0, keepdims=True)
-
-  zs = (zs - mu) / (std + eps)
-
-  return zs, mu, std
-
-
 """
 
 RESPONSE-LEVEL ANALYSIS
