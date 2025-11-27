@@ -86,7 +86,8 @@ def build_psths(
   end = windows["post"][1]
   duration = end - start
   bins = np.arange(0, duration+bin_size, bin_size)
-  tps = (bins[:-1] + bins[1:] / 2)
+  tps = (bins[:-1] + bins[1:]) / 2
+  tps = tps + start
 
   # Defining output structure
 
