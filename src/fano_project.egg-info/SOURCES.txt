@@ -1,0 +1,15 @@
+pyproject.toml
+src/fano_project/__init__.py
+src/fano_project/analysis.py
+src/fano_project/config.py
+src/fano_project/data_io.py
+src/fano_project/pipeline.py
+src/fano_project/preprocessing.py
+src/fano_project/stats.py
+src/fano_project.egg-info/PKG-INFO
+src/fano_project.egg-info/SOURCES.txt
+src/fano_project.egg-info/dependency_links.txt
+src/fano_project.egg-info/top_level.txt
+src/fano_project/preprocessing/__init__.py
+src/fano_project/preprocessing/caching.py
+src/fano_project/preprocessing/preprocess_session.py
