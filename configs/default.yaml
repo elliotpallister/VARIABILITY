@@ -1,0 +1,47 @@
+paths:
+
+  data: "data/allen_cache"
+  cache: "outputs/cache"
+  results: "outputs/results"
+
+dataset:
+
+  selection: list # options: all | list 
+  session_ids: [1044385384, 1044594870]  # done so far: 1044385384, 1044594870
+
+preprocessing:
+
+  filters:
+    quality:
+      firing_rate: 0.1 
+      snr: 1
+      isi_violations: 1
+    visual_selectivity:
+      alpha: 0.05
+      effect_threshold: 0.5
+      min_n_eff: 20
+
+  psth:
+    bin_size: 0.01 # make sure this is in s, i.e 0.01 = 10ms
+    windows:
+      pre: [-0.25, 0]
+      evoked: [0,0.25]
+      post: [0.25, 0.5]
+
+analysis:
+
+  time_sampling:
+    window_size: 0.05 # make sure this is in s, i.e 0.01 = 10ms
+
+  areas: ['VISp', 'VISpm', 'VISal', 'VISl', 'VISrl']
+
+  filtering:
+    vsel:
+      include: True # IF True include vsel, ELSE only use quality control
+      level: strict # options: strict | loose <-- needs coding in
+
+  mean_matching:
+    n_runs: 50 
+
+  
+
