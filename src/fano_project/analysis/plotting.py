@@ -42,6 +42,15 @@ def plot_fano_traces(
         
         # COLLECTING TRACES ACROSS MOUSE
 
+        i = 0
+
+        for key, dat in keys['Familiar'].fano.items():
+            print(key)
+            print(dat).fano
+            if i >= 1:
+                return None
+            i += 1
+
         familiar_traces = {key: dat['fano_mm'] for key, dat in keys['Familiar'].fano.items()}
         novel_traces = {key: dat['fano_mm'] for key, dat in keys['Novel'].fano.items()}
 
